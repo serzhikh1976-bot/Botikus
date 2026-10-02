@@ -162,9 +162,30 @@ async function checkChats(): Promise<void> {
   }
 }
 
+// Защита от параллельных запусков: таймер, внешний крон и проверка при старте
+// могут сработать почти одновременно — иначе чат получит два предупреждения.
+let isChecking = false;
+
+export async function runCheckOnce(): Promise<boolean> {
+  if (isChecking) return false;
+  isChecking = true;
+  try {
+    await checkChats();
+    return true;
+  } catch (err) {
+    console.error('[AutoCloseChats] Необработанная ошибка:', err);
+    return true;
+  } finally {
+    isChecking = false;
+  }
+}
+
 export function startAutoCloseChatsJob(): void {
   setInterval(() => {
-    checkChats().catch(err => console.error('[AutoCloseChats] Необработанная ошибка:', err));
+    void runCheckOnce();
   }, CHECK_INTERVAL_MS);
   console.log(`[AutoCloseChats] Джоб запущен, проверка каждые ${CHECK_INTERVAL_MS / 60000} мин`);
+
+  // Сразу после старта (после пробуждения хостинга) — не ждём первый тик таймера
+  void runCheckOnce();
 }
