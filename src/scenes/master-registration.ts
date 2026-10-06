@@ -148,7 +148,7 @@ export function createMasterRegistrationScene(botId: number) {
 
         if (subDistricts.length === 0) {
           // Подрайонов нет — сразу к цене
-          await ctx.reply('💰 Укажите минимальную цену ваших услуг (в грн):');
+          await ctx.reply('💰 Укажите минимальную цену ваших услуг (в грн только цифры):');
           ctx.scene.next();
           return;
         }
@@ -166,7 +166,7 @@ export function createMasterRegistrationScene(botId: number) {
         const subDistrictId = parseInt(data.replace('subdistrict:', ''));
         ctx.scene.state.sub_district_id = subDistrictId;
         await ctx.answerCallbackQuery();
-        await ctx.reply('💰 Укажите минимальную цену ваших услуг (в грн):');
+        await ctx.reply('💰 Укажите минимальную цену ваших услуг (в грн только цифры ):');
         ctx.scene.next();
       }
     },
