@@ -2,6 +2,7 @@ import { WizardScene, InlineKeyboard } from 'ultra-telegram-framework';
 import type { SceneContext } from 'ultra-telegram-framework';
 import { db } from '../db.js';
 import { masterKeyboard } from '../bot/keyboards.js';
+import { handlePhotoInput, getUserId, photoKeyboard } from './photo-input.js';
 
 interface Service { id: number; name: string; }
 interface District { id: number; name: string; }
@@ -180,46 +181,25 @@ export function createMasterRegistrationScene(botId: number) {
         return ctx.reply('Пожалуйста, введите цену числом (например: 300):');
       }
       ctx.scene.state.price_from = price;
-      await ctx.reply('✅ Цена сохранена!\n\nТеперь отправьте фото ваших работ (до 5 штук).\nКогда закончите — нажмите /done');
+      await ctx.reply(
+        '✅ Цена сохранена!\n\n📸 Теперь отправьте фото ваших работ (до 5 штук, можно сразу несколькими).\nНе хотите добавлять фото сейчас — нажмите «Пропустить».',
+        { reply_markup: photoKeyboard('register', false).toJSON() }
+      );
       ctx.scene.next();
     },
 
-    // Step 4: ждём фото, после /done или /skip — сохраняем профиль
+    // Step 4: ждём фото; кнопки «Готово» / «Пропустить» (или /done, /skip) — сохраняем профиль
     async (ctx) => {
-      const isDone = ctx.text === '/done';
-      const isSkip = ctx.text === '/skip';
+      const action = await handlePhotoInput(ctx, { botId, mode: 'register' });
+      if (action === 'wait') return;
 
-      // Получаем фото
-      if (!isDone && !isSkip) {
-        const photoSizes = ctx.message && 'photo' in ctx.message ? ctx.message.photo : undefined;
-        if (photoSizes && photoSizes.length > 0) {
-          const photos = (ctx.scene.state.photos as string[] | undefined) ?? [];
-          const fileId = photoSizes[photoSizes.length - 1].file_id;
-          photos.push(fileId);
-          ctx.scene.state.photos = photos;
-
-          if (photos.length >= 5) {
-            // Лимит достигнут — автоматически завершаем
-            await ctx.reply('📸 5/5 фото получено. Сохраняем профиль...');
-            // Падаем вниз к сохранению
-          } else {
-            await ctx.reply(`📸 Фото ${photos.length}/5 получено. Ещё или /done:`);
-            return;
-          }
-        } else {
-          return ctx.reply('Отправьте фото или /done:');
-        }
-      }
-
-      // /skip — обнуляем фото
-      if (isSkip) ctx.scene.state.photos = [];
+      // «Пропустить» — сохраняем без фото
+      if (action === 'skip') ctx.scene.state.photos = [];
 
       const photos = ctx.scene.state.photos as string[] ?? [];
 
       // Получаем telegram_id из текстового сообщения
-      const telegramId = ctx.message && 'from' in ctx.message
-        ? ctx.message.from?.id
-        : undefined;
+      const telegramId = getUserId(ctx);
 
       if (!telegramId) {
         await ctx.reply('❌ Не удалось определить пользователя. Попробуйте /start заново.');
