@@ -3,6 +3,7 @@ import type { TelegramBot, SceneContext } from "ultra-telegram-framework";
 import { db, type BotRecord } from "../../db.js";
 import { escapeHtml } from "../../shared/telegram-html.js";
 import { getDistricts, buildListKeyboard } from "../../shared/districts.js";
+import { replyWithCard } from "../photos.js";
 
 function buildEditKeyboard(isActive: boolean): InlineKeyboard {
   return new InlineKeyboard()
@@ -65,23 +66,7 @@ export async function showMasterProfile(
     `💰 от ${raw.price_from} грн\n` +
     `${status}`;
 
-const photos = raw.photos as string[];
-
-  if (photos && photos.length > 0) {
-    try {
-      await ctx.replyWithMediaGroup(
-        photos.map((fileId, i) => ({
-          type: 'photo' as const,
-          media: fileId,
-          ...(i === 0 ? { caption: text, parse_mode: 'HTML' as const } : {})
-        }))
-      );
-    } catch {
-      await ctx.reply(text, { parse_mode: 'HTML' });
-    }
-  } else {
-    await ctx.reply(text, { parse_mode: 'HTML' });
-  }
+  await replyWithCard(ctx, raw.photos as string[], text);
 }
 
 
