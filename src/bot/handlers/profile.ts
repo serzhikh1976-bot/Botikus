@@ -1,3 +1,4 @@
+import { photoKeyboard } from "../../scenes/photo-input.js";
 import { InlineKeyboard } from "ultra-telegram-framework";
 import type { TelegramBot, SceneContext } from "ultra-telegram-framework";
 import { db, type BotRecord } from "../../db.js";
@@ -121,9 +122,8 @@ export function registerProfileHandlers(
 
     await ctx.reply(
       `📸 Сейчас у вас ${photos.length} фото в портфолио.\n\n` +
-        `Отправьте новые фото (до 5) чтобы заменить все.\n` +
-        `/done — сохранить\n` +
-        `/skip — удалить все фото`,
+        `Отправьте новые фото (до 5 штук, можно сразу несколькими), чтобы заменить все текущие.`,
+      { reply_markup: photoKeyboard('edit', false).toJSON() }
     );
 
     ctx.scene.enter("edit_photos");
