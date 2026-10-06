@@ -2,66 +2,46 @@ import { WizardScene } from 'ultra-telegram-framework';
 import type { SceneContext } from 'ultra-telegram-framework';
 import { db } from '../db.js';
 import { masterKeyboard } from '../bot/keyboards.js';
+import { handlePhotoInput, getUserId, photoKeyboard } from './photo-input.js';
 
 export function createEditPhotosScene(botId: number) {
   return new WizardScene<SceneContext>(
     'edit_photos',
 
-    // Step 0: собираем новые фото
+    // Step 0: собираем новые фото; кнопки «Сохранить» / «Удалить все фото» / «Отмена»
     async (ctx) => {
-      if (!ctx.message && !ctx.text) return;
+      if (!ctx.message && !ctx.callbackQuery) return;
 
-      const telegramId = ctx.message && 'from' in ctx.message
-        ? ctx.message.from?.id
-        : undefined;
-
+      const telegramId = getUserId(ctx);
       if (!telegramId) return ctx.scene.leave();
 
-      // /done — сохраняем
-      if (ctx.text === '/done') {
-        const photos = ctx.scene.state.photos as string[] ?? [];
+      const action = await handlePhotoInput(ctx, { botId, mode: 'edit' });
+      if (action === 'wait') return;
 
-        if (photos.length === 0) {
-          return ctx.reply('Отправьте хотя бы одно фото, или /skip чтобы удалить все фото.');
-        }
-
-        await savePhotos(telegramId, botId, photos);
-        await ctx.replyWithKeyboard(
-          `✅ Фото обновлены (${photos.length} шт.)`,
-          masterKeyboard
-        );
+      if (action === 'cancel') {
+        await ctx.replyWithKeyboard('↩️ Отменено, фото не изменились.', masterKeyboard);
         return ctx.scene.leave();
       }
 
-      // /skip — удаляем все фото
-      if (ctx.text === '/skip') {
+      // «Удалить все фото»
+      if (action === 'skip') {
         await savePhotos(telegramId, botId, []);
         await ctx.replyWithKeyboard('✅ Все фото удалены.', masterKeyboard);
         return ctx.scene.leave();
       }
 
-      // Получаем фото
-      const photoSizes = ctx.message && 'photo' in ctx.message
-        ? ctx.message.photo
-        : undefined;
-
-      if (photoSizes && photoSizes.length > 0) {
-        const photos = (ctx.scene.state.photos as string[] | undefined) ?? [];
-        const fileId = photoSizes[photoSizes.length - 1].file_id;
-        photos.push(fileId);
-        ctx.scene.state.photos = photos;
-
-        if (photos.length >= 5) {
-          await savePhotos(telegramId, botId, photos);
-          await ctx.replyWithKeyboard('✅ Фото обновлены (5/5)!', masterKeyboard);
-          return ctx.scene.leave();
-        }
-
-        await ctx.reply(`📸 Фото ${photos.length}/5. Ещё или /done:`);
-        return;
+      // «Сохранить»
+      const photos = (ctx.scene.state.photos as string[] | undefined) ?? [];
+      if (photos.length === 0) {
+        return ctx.reply(
+          'Сначала отправьте хотя бы одно фото или нажмите «Удалить все фото».',
+          { reply_markup: photoKeyboard('edit', false).toJSON() }
+        );
       }
 
-      await ctx.reply('Отправьте фото, /done чтобы сохранить, или /skip чтобы удалить все:');
+      await savePhotos(telegramId, botId, photos);
+      await ctx.replyWithKeyboard(`✅ Фото обновлены (${photos.length} шт.)`, masterKeyboard);
+      return ctx.scene.leave();
     }
   );
 }
