@@ -3,6 +3,7 @@ import type { TelegramBot, SceneContext } from 'ultra-telegram-framework';
 import { db, type BotRecord } from '../../db.js';
 import { escapeHtml } from '../../shared/telegram-html.js';
 import { clearButtons } from '../helpers.js';
+import { replyWithCard } from '../photos.js';
 import { getServicesWithMasters } from '../../scenes/client-search.js';
 
 export function registerSearchHandlers(
@@ -115,28 +116,7 @@ export function registerSearchHandlers(
       .text('💬 Написать мастеру', `chat:${masterId}`)
       .text('💰 Смотреть цены', `price_view:${masterId}`);
 
-    const photos = raw.photos as string[];
-
-    if (photos && photos.length > 0) {
-      try {
-        await ctx.replyWithMediaGroup(
-          photos.map((fileId: string, i: number) => ({
-            type: 'photo' as const,
-            media: fileId,
-            ...(i === 0 ? { caption: text, parse_mode: 'HTML' as const } : {})
-          }))
-        );
-        await ctx.reply('👆 Контакт мастера:', { reply_markup: keyboard.toJSON() });
-      } catch {
-        // fileId устарел — показываем карточку без фото
-        await ctx.reply(text, { parse_mode: 'HTML', reply_markup: keyboard.toJSON() });
-      }
-    } else {
-      await ctx.reply(text, {
-        parse_mode: 'HTML',
-        reply_markup: keyboard.toJSON()
-      });
-    }
+    await replyWithCard(ctx, raw.photos as string[], text, keyboard);
   });
 
   // Просмотр детального прайс-листа мастера клиентом
