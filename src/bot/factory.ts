@@ -72,5 +72,11 @@ createClientSearchScene(record.id),
   registerCommunityHandlers(bot, record); // тоже до chat — bot.match('👥 Сообщество')
   registerChatHandlers(bot, record);
 
+  // Кнопка «Меню» рядом с полем ввода остаётся даже после очистки истории
+  // переписки — через неё человек может отправить /start и вернуть клавиатуру.
+  bot.setMyCommands([{ command: 'start', description: 'Показать меню' }]).catch((err) => {
+    console.warn(`[${record.city_name}] Не удалось установить меню команд:`, err?.message ?? err);
+  });
+
   return bot;
 }
