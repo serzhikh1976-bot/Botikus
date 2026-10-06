@@ -1,9 +1,9 @@
-import { InlineKeyboard } from 'ultra-telegram-framework';
+import { InlineKeyboard, type ReplyKeyboard } from 'ultra-telegram-framework';
 import type { TelegramBot, SceneContext } from 'ultra-telegram-framework';
 import { db, type BotRecord } from '../../db.js';
 import { escapeHtml } from '../../shared/telegram-html.js';
 import { clearButtons, sendTracked } from '../helpers.js';
-import { endChatKeyboard, masterActionsKeyboard } from '../keyboards.js';
+import { endChatKeyboard, masterActionsKeyboard, masterKeyboard, clientKeyboard } from '../keyboards.js';
 
 // Человекочитаемое "давно ли было последнее сообщение" для списка открытых чатов
 function formatElapsed(iso: string): string {
@@ -580,7 +580,13 @@ export function registerChatHandlers(
   // Если сообщение не попало ни в один активный чат: зарегистрированному
   // клиенту/мастеру говорим "нет активных чатов", а не "не понимаю команду" —
   // это два разных по смыслу случая.
-  async function noActiveChatMessage(userId: number): Promise<string> {
+  //
+  // К ответу прикрепляем основную клавиатуру роли. Если пользователь очистил
+  // историю переписки, Telegram убирает reply-клавиатуру вместе с сообщениями,
+  // и ему нечем пользоваться. Любое его сообщение теперь возвращает кнопки.
+  async function noActiveChatMessage(
+    userId: number
+  ): Promise<{ text: string; keyboard?: ReplyKeyboard }> {
     const { data: userRow } = await db
       .from('users')
       .select('role')
@@ -588,11 +594,33 @@ export function registerChatHandlers(
       .eq('telegram_id', userId)
       .maybeSingle();
 
-    if ((userRow as { role: string } | null)?.role) {
-      return '💬 У вас нет активных чатов.';
+    const role = (userRow as { role: string } | null)?.role;
+
+    if (role === 'client') {
+      return { text: '💬 У вас нет активных чатов.', keyboard: clientKeyboard };
     }
 
-    return 'Не понимаю эту команду 🤔\n/help — список команд';
+    if (role === 'master') {
+      const { data: profile } = await db
+        .from('masters_profiles')
+        .select('master_id')
+        .eq('bot_id', record.id)
+        .eq('master_id', userId)
+        .maybeSingle();
+
+      if (profile) {
+        return { text: '💬 У вас нет активных чатов.', keyboard: masterKeyboard };
+      }
+      // Роль есть, профиля нет — регистрация не завершена (например, бот перезапускался)
+      return { text: '👋 Похоже, вы не завершили регистрацию. Отправьте /start, чтобы продолжить.' };
+    }
+
+    return { text: 'Не понимаю эту команду 🤔\nОтправьте /start, чтобы начать.' };
+  }
+
+  async function replyNoActiveChat(ctx: SceneContext, userId: number): Promise<void> {
+    const { text, keyboard } = await noActiveChatMessage(userId);
+    await ctx.reply(text, keyboard ? { reply_markup: keyboard.toJSON() } : undefined);
   }
 
   async function routeChatMessage(
@@ -812,7 +840,7 @@ export function registerChatHandlers(
 
     const handled = await routeChatMessage(userId, fromMsg, text, null);
     if (!handled) {
-      await ctx.reply(await noActiveChatMessage(userId));
+      await replyNoActiveChat(ctx, userId);
     }
   });
 
@@ -849,7 +877,7 @@ export function registerChatHandlers(
 
     const handled = await routeChatMessage(userId, fromMsg, null, fileId);
     if (!handled) {
-      await ctx.reply(await noActiveChatMessage(userId));
+      await replyNoActiveChat(ctx, userId);
     }
   });
 }
